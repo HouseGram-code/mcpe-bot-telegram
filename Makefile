@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 COMPOSE ?= docker compose
 
-.PHONY: help install build up down restart logs bot-logs ps test firewall hooks check-secrets diag clean
+.PHONY: help install build up down restart logs bot-logs ps test firewall hooks check-secrets diag tunnel tunnel-nokey clean
 
 help:
 	@echo "make install   - всё сам: Docker, .env, сборка образов, порты, старт"
@@ -13,6 +13,8 @@ help:
 	@echo "make ps        - список контейнеров бота и серверов"
 	@echo "make firewall  - открыть UDP-порты в локальном фаерволле"
 	@echo "make diag      - найти причину ошибки 'не удалось подключиться'"
+	@echo "make tunnel    - туннель playit.gg, если у машины нет публичного IP"
+	@echo "make tunnel-nokey - туннель без ключа и регистрации (Pinggy UDP)"
 	@echo "make test      - оффлайн-тесты (без Docker и сети)"
 	@echo "make hooks     - включить git-хук, который не даст закоммитить токен"
 	@echo "make check-secrets - проверить весь код на секреты (как на GitHub)"
@@ -42,6 +44,12 @@ ps:
 
 firewall:
 	@sudo bash scripts/firewall.sh
+
+tunnel-nokey:
+	@bash scripts/tunnel-nokey.sh $(WATCH)
+
+tunnel:
+	@bash scripts/playit-setup.sh $(SECRET) $(ADDR)
 
 diag:
 	@bash scripts/diag.sh $(PORT)

@@ -69,7 +69,7 @@ services:
   # docker compose --profile playit up -d playit
   playit:
     profiles: ["playit"]
-    image: ${PLAYIT_IMAGE:-ghcr.io/playit-cloud/playit-agent:0.15}
+    image: ${PLAYIT_IMAGE:-ghcr.io/playit-cloud/playit-agent:latest}
     container_name: playit
     restart: unless-stopped
     network_mode: host

@@ -107,6 +107,7 @@ class Config:
     upnp_lease_seconds: int
     playit_secret: str
     playit_image: str
+    playit_tunnel_address: str
 
     server_ttl_minutes: int
     max_servers_per_user: int
@@ -182,7 +183,8 @@ class Config:
             public_host=env_str("PUBLIC_HOST", ""),
             upnp_lease_seconds=env_int("UPNP_LEASE_SECONDS", 3600),
             playit_secret=env_str("PLAYIT_SECRET", ""),
-            playit_image=env_str("PLAYIT_IMAGE", "ghcr.io/playit-cloud/playit-agent:0.15"),
+            playit_image=env_str("PLAYIT_IMAGE", "ghcr.io/playit-cloud/playit-agent:latest"),
+            playit_tunnel_address=env_str("PLAYIT_TUNNEL_ADDRESS", ""),
             server_ttl_minutes=env_int("SERVER_TTL_MINUTES", 240),
             max_servers_per_user=env_int("MAX_SERVERS_PER_USER", 2),
             memory_limit_mb=env_int("SERVER_MEMORY_MB", 1024),

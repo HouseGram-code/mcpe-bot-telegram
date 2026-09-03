@@ -725,5 +725,142 @@ class DiagToolsTests(unittest.TestCase):
         self.assertIn("zend.assertions=-1", text)
 
 
+class PlayitTunnelTests(unittest.TestCase):
+    """Туннель playit.gg - единственный путь, когда у машины нет публичного IP."""
+
+    def _publisher(self, address: str):
+        import publisher as publisher_module
+
+        class Ctr:
+            status = "running"
+
+            def start(self):
+                raise AssertionError("running container must not be restarted")
+
+            def logs(self, tail=0):
+                return b""
+
+        class Containers:
+            def __init__(self):
+                self.created = []
+
+            def get(self, name):
+                return Ctr()
+
+            def run(self, image, **kwargs):
+                self.created.append((image, kwargs))
+                return Ctr()
+
+        docker = types.SimpleNamespace(containers=Containers())
+        cfg = types.SimpleNamespace(
+            playit_secret="agent-secret-key-1234567890",
+            playit_image="ghcr.io/playit-cloud/playit-agent:latest",
+            playit_tunnel_address=address,
+            container_prefix="mcpe-srv-",
+            address_mode="playit",
+            public_host="",
+            upnp_lease_seconds=3600,
+        )
+        return publisher_module.Publisher(cfg, docker)
+
+    def test_configured_tunnel_address_wins(self):
+        result = self._publisher("happy-fox.ply.gg:41234")._publish_playit(19132, "mcpe")
+        self.assertEqual(result.address, "happy-fox.ply.gg:41234")
+        self.assertEqual(result.kind, "playit")
+
+    def test_tunnel_address_without_port_gets_local_port(self):
+        result = self._publisher("happy-fox.ply.gg")._publish_playit(19133, "mcpe")
+        self.assertEqual(result.address, "happy-fox.ply.gg:19133")
+
+    def test_without_secret_playit_is_skipped(self):
+        pub = self._publisher("happy-fox.ply.gg:41234")
+        pub.cfg.playit_secret = ""
+        self.assertIsNone(pub._publish_playit(19132, "mcpe"))
+
+    def test_setup_script_is_safe_and_complete(self):
+        text = (ROOT / "scripts" / "playit-setup.sh").read_text()
+        for needle in (
+            "new-docker",
+            "PLAYIT_SECRET",
+            "ADDRESS_MODE playit",
+            "--profile playit",
+            "Minecraft Bedrock",
+            "PLAYIT_TUNNEL_ADDRESS",
+            "raknet_ping.py",
+        ):
+            self.assertIn(needle, text)
+        self.assertIn("read -rs SECRET", text)
+        self.assertNotIn('echo "$SECRET"', text)
+
+    def test_env_and_compose_wire_the_tunnel(self):
+        self.assertIn("PLAYIT_TUNNEL_ADDRESS=", (ROOT / ".env.example").read_text())
+        compose = (ROOT / "docker-compose.yml").read_text()
+        self.assertIn("SECRET_KEY: ${PLAYIT_SECRET:-}", compose)
+        self.assertRegex(compose, r"  playit:\n(?:.*\n)*?    network_mode: host")
+
+    def test_diag_verdict_detects_nat(self):
+        text = (ROOT / "scripts" / "diag.sh").read_text()
+        for needle in ("BEHIND_NAT", "169.254", "playit-setup.sh"):
+            self.assertIn(needle, text)
+
+class NoKeyTunnelTests(unittest.TestCase):
+    """Туннель без ключа (Pinggy UDP) и разбор адреса из логов."""
+
+    def _root(self):
+        import pathlib as _p
+
+        return _p.Path(__file__).resolve().parents[1]
+
+    def _parser(self):
+        import importlib.util
+
+        path = self._root() / "scripts" / "parse_tunnel_address.py"
+        spec = importlib.util.spec_from_file_location("parse_tunnel_address", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_parser_reads_scheme_form(self):
+        parser = self._parser()
+        log = "Tunnel started\nudp://rnjqf-49-36.a.free.pinggy.link:39271\n"
+        self.assertEqual(parser.find(log), "rnjqf-49-36.a.free.pinggy.link:39271")
+
+    def test_parser_reads_split_host_and_port(self):
+        parser = self._parser()
+        log = "Public address: happy-fox.a.pinggy.online\nUDP port 41234 assigned\n"
+        self.assertEqual(parser.find(log), "happy-fox.a.pinggy.online:41234")
+
+    def test_parser_takes_the_latest_address(self):
+        parser = self._parser()
+        log = "udp://old.a.pinggy.online:1111\nreconnected\nudp://new.a.pinggy.online:2222\n"
+        self.assertEqual(parser.find(log), "new.a.pinggy.online:2222")
+
+    def test_parser_returns_none_on_noise(self):
+        parser = self._parser()
+        self.assertIsNone(parser.find("npm WARN deprecated foo\nstarting...\n"))
+
+    def test_script_is_keyless_and_publishes_address(self):
+        script = (self._root() / "scripts" / "tunnel-nokey.sh").read_text()
+        for needle in (
+            "--type udp",
+            "-l $PORT",
+            "ADDRESS_MODE manual",
+            "PUBLIC_HOST",
+            "--watch",
+            "raknet_ping.py",
+            "parse_tunnel_address.py",
+        ):
+            self.assertIn(needle, script, needle)
+        self.assertNotIn("--token", script)
+        self.assertNotIn("SECRET", script)
+
+    def test_makefile_and_readme_document_it(self):
+        makefile = (self._root() / "Makefile").read_text()
+        readme = (self._root() / "README.md").read_text()
+        self.assertIn("tunnel-nokey:", makefile)
+        self.assertIn("tunnel-nokey", readme)
+        self.assertIn("60", readme)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

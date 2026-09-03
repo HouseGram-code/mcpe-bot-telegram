@@ -204,6 +204,15 @@ class Publisher:
             return None
         name = self._playit_container_name(port)
         container = self._ensure_playit_container(name)
+        fixed = (self.cfg.playit_tunnel_address or "").strip()
+        if fixed:
+            address = fixed if ":" in fixed else f"{fixed}:{port}"
+            return Published(
+                address=address,
+                kind="playit",
+                note="адрес туннеля playit.gg из настроек",
+                meta={"container": name, "source": "PLAYIT_TUNNEL_ADDRESS"},
+            )
         address = self._read_playit_address(container, timeout=75.0)
         if not address:
             return Published(

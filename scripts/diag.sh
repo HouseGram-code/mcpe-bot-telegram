@@ -24,7 +24,7 @@ NET_MODE="$(env_get SERVER_NETWORK_MODE)"; NET_MODE="${NET_MODE:-host}"
 ADDR_MODE="$(env_get ADDRESS_MODE)";       ADDR_MODE="${ADDR_MODE:-auto}"
 PUBLIC_HOST="$(env_get PUBLIC_HOST)"
 PLAYIT_SECRET="$(env_get PLAYIT_SECRET)"
-LOCAL_OK=0; PUB_IP=""; PUB_KIND=""; DB_ADDR=""; DB_KIND=""; CTR=""
+LOCAL_OK=0; PUB_IP=""; PUB_KIND=""; DB_ADDR=""; DB_KIND=""; CTR=""; BEHIND_NAT=0
 
 sec "Конфигурация"
 note "режим сети контейнера : $NET_MODE"
@@ -152,11 +152,16 @@ case "$PUB_KIND" in
 esac
 if have ip; then
   note "локальные адреса: $(ip -4 -o addr show scope global 2>/dev/null | awk '{print $2"="$4}' | tr '\n' ' ')"
+  if ip -4 -o addr show scope global 2>/dev/null | grep -qE 'inet 169\.254\.'; then
+    BEHIND_NAT=1
+    bad "на интерфейсе link-local 169.254.x.x - машина за NAT провайдера (песочница/microVM)"
+  fi
   if [ -n "$PUB_IP" ]; then
     if ip -4 -o addr show scope global 2>/dev/null | grep -q "inet $PUB_IP/"; then
       ok "внешний IP настроен прямо на интерфейсе - NAT нет"
     else
-      note "внешнего IP на интерфейсах нет - машина за NAT, нужен проброс порта или туннель"
+      BEHIND_NAT=1
+      bad "внешнего IP нет ни на одном интерфейсе - машина за NAT, входящий UDP невозможен"
     fi
   fi
 fi
@@ -197,24 +202,18 @@ if [ "$LOCAL_OK" != "1" ]; then
   note "если сеть контейнера не host: поставь SERVER_NETWORK_MODE=host в .env и пересоздай сервер"
 else
   ok "Ядро GenisysPro живо и отвечает по UDP $PORT на самой машине."
-  case "$PUB_KIND" in
-    public)
-      note "1) Проверь снаружи (с ноутбука по мобильному интернету):"
-      note "     python3 raknet_ping.py $PUB_IP $PORT"
-      note "2) Тишина - UDP $PORT закрыт: открой его в панели провайдера (security group/firewall)"
-      note "   и локально: sudo make firewall"
-      note "3) Есть ответ - в игре: Play - Servers - Add Server, адрес $PUB_IP, порт $PORT"
-      ;;
-    *)
-      bad "Прямое подключение невозможно: публичного маршрутизируемого IP у машины нет."
-      note "Решение - туннель playit.gg (работает через исходящее соединение):"
-      note "  1. playit.gg - регистрация - Agents - New Agent - скопировать secret key"
-      note "  2. в .env:  PLAYIT_SECRET=<ключ>  и  ADDRESS_MODE=playit"
-      note "  3. docker compose --profile playit up -d playit && make restart"
-      note "  4. в панели playit: Tunnel - Minecraft Bedrock (UDP) - local port $PORT"
-      note "  5. выданный адрес вида xxxx.ply.gg и порт вводи в игре как внешний сервер"
-      ;;
-  esac
+  if [ "$BEHIND_NAT" = "1" ] || [ "$PUB_KIND" != "public" ]; then
+    bad "Прямое подключение невозможно: публичного IP на машине нет (NAT/CGNAT провайдера)."
+    note "Проброс портов, ufw и UPnP тут не помогут - нужен туннель:"
+    note "    bash scripts/playit-setup.sh"
+    note "Скрипт сам впишет ключ в .env, поднимет агента и проверит адрес."
+  else
+    note "1) Проверь снаружи (с телефона по мобильному интернету):"
+    note "     python3 scripts/raknet_ping.py $PUB_IP $PORT"
+    note "   или открой https://api.mcsrvstat.us/bedrock/3/$PUB_IP:$PORT"
+    note "2) Тишина - UDP $PORT закрыт: открой его в панели провайдера и локально: sudo make firewall"
+    note "3) Есть ответ - в игре: Play - Servers - Add Server, адрес $PUB_IP, порт $PORT"
+  fi
   [ -n "$DB_ADDR" ] && note "бот выдавал адрес: $DB_ADDR (способ: ${DB_KIND:-?})"
 fi
 printf '\n'
