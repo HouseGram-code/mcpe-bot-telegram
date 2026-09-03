@@ -75,6 +75,7 @@ RUN set -eux; \
     fi; \
     apt-get -o Acquire::Check-Valid-Until=false update; \
     apt-get install -y --no-install-recommends \
+        net-tools iproute2 \
         ca-certificates tzdata procps zlib1g libsqlite3-0 libyaml-0-2 \
         libgmp10 libxml2 libedit2; \
     apt-get install -y --no-install-recommends libssl1.0.2 \

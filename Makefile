@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 COMPOSE ?= docker compose
 
-.PHONY: help install build up down restart logs bot-logs ps test firewall hooks check-secrets clean
+.PHONY: help install build up down restart logs bot-logs ps test firewall hooks check-secrets diag clean
 
 help:
 	@echo "make install   - всё сам: Docker, .env, сборка образов, порты, старт"
@@ -12,6 +12,7 @@ help:
 	@echo "make logs      - логи бота"
 	@echo "make ps        - список контейнеров бота и серверов"
 	@echo "make firewall  - открыть UDP-порты в локальном фаерволле"
+	@echo "make diag      - найти причину ошибки 'не удалось подключиться'"
 	@echo "make test      - оффлайн-тесты (без Docker и сети)"
 	@echo "make hooks     - включить git-хук, который не даст закоммитить токен"
 	@echo "make check-secrets - проверить весь код на секреты (как на GitHub)"
@@ -41,6 +42,9 @@ ps:
 
 firewall:
 	@sudo bash scripts/firewall.sh
+
+diag:
+	@bash scripts/diag.sh $(PORT)
 
 test:
 	@python3 tests/selftest.py

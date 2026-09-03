@@ -141,6 +141,7 @@ PHP_BIN="$(command -v php || echo /opt/php/bin/php)"
 
 exec "$PHP_BIN" \
     -dmemory_limit="$PHP_MEMORY_LIMIT" \
+    -dzend.assertions=-1 \
     -dopcache.enable_cli=0 \
     -dphar.readonly=0 \
     "$PHAR" \

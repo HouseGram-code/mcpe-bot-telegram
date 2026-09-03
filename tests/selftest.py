@@ -635,5 +635,95 @@ class BuildTests(unittest.TestCase):
         self.assertNotIn("PHP_BRANCH", compose)
 
 
+class DiagToolsTests(unittest.TestCase):
+    """scripts/raknet_ping.py и scripts/diag.sh — живой RakNet-пинг без интернета."""
+
+    @staticmethod
+    def _ping_module():
+        import importlib.util
+
+        path = ROOT / "scripts" / "raknet_ping.py"
+        spec = importlib.util.spec_from_file_location("raknet_ping", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_ping_packet_shape(self):
+        mod = self._ping_module()
+        packet = mod.build_ping(123)
+        self.assertEqual(len(packet), 33)
+        self.assertEqual(packet[0], 0x01)
+        self.assertEqual(packet[9:25], mod.MAGIC)
+
+    def test_ping_roundtrip_against_fake_server(self):
+        mod = self._ping_module()
+        motd = "MCPE;GenisysPro test;113;1.1.5;0;20;42;world;Survival;1;19132;19132"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+        def responder():
+            data, addr = sock.recvfrom(2048)
+            if data[0] != 0x01 or data[9:25] != mod.MAGIC:
+                return
+            payload = motd.encode()
+            sock.sendto(
+                bytes([0x1C])
+                + data[1:9]
+                + struct.pack(">q", 777)
+                + mod.MAGIC
+                + struct.pack(">H", len(payload))
+                + payload,
+                addr,
+            )
+
+        thread = threading.Thread(target=responder, daemon=True)
+        thread.start()
+        try:
+            info = mod.ping("127.0.0.1", port, timeout=3.0, attempts=1)
+        finally:
+            thread.join(timeout=3)
+            sock.close()
+        self.assertEqual(info["version"], "1.1.5")
+        self.assertEqual(info["protocol"], "113")
+        self.assertEqual(info["max_players"], "20")
+        self.assertIn("GenisysPro test", info["motd"])
+
+    def test_ping_reports_silence(self):
+        mod = self._ping_module()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        with self.assertRaises(Exception):
+            mod.ping("127.0.0.1", port, timeout=0.4, attempts=1)
+
+    def test_pong_parser_rejects_garbage(self):
+        mod = self._ping_module()
+        with self.assertRaises(ValueError):
+            mod.parse_pong(b"\x00" * 40)
+
+    def test_diag_script_covers_usual_causes(self):
+        text = (ROOT / "scripts" / "diag.sh").read_text()
+        for needle in (
+            "raknet_ping.py",
+            "playit",
+            "ufw",
+            "cgnat",
+            "SERVER_NETWORK_MODE",
+            "docker port",
+        ):
+            self.assertIn(needle, text)
+
+    def test_makefile_exposes_diag(self):
+        makefile = (ROOT / "Makefile").read_text()
+        self.assertIn("diag:", makefile)
+        self.assertIn("scripts/diag.sh", makefile)
+
+    def test_entrypoint_silences_assertions(self):
+        text = (ROOT / "server-image" / "entrypoint.sh").read_text()
+        self.assertIn("zend.assertions=-1", text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
