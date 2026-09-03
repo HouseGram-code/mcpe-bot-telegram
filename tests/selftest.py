@@ -608,6 +608,27 @@ class BuildTests(unittest.TestCase):
         self.assertIn("--enable-maintainer-zts", script)
         self.assertNotIn("pmmp/PHP-Binaries.git", script)
 
+    def test_php_7_0_is_pinned_everywhere(self):
+        """PHP 7.1+ rejects the Genisys class `Void`, so 7.0 is mandatory."""
+        script = (self.root / "server-image" / "build-php.sh").read_text()
+        dockerfile = (self.root / "server-image" / "Dockerfile").read_text()
+        compose = (self.root / "docker-compose.yml").read_text()
+        env_example = (self.root / ".env.example").read_text()
+        for text in (script, dockerfile, compose, env_example):
+            self.assertIn("7.0.33", text)
+            self.assertNotIn("7.2.34", text)
+        self.assertIn("v3.1.6", script)
+        self.assertIn("v3.1.6", dockerfile)
+
+    def test_runtime_openssl_matches_php_7_0(self):
+        """PHP 7.0 cannot link against OpenSSL 1.1, so 1.0.2 must be arranged."""
+        script = (self.root / "server-image" / "build-php.sh").read_text()
+        dockerfile = (self.root / "server-image" / "Dockerfile").read_text()
+        self.assertIn("1.0.2", script)
+        self.assertIn("rpath", script)
+        self.assertIn("libssl1.0", dockerfile)
+        self.assertIn("archive.debian.org", dockerfile)
+
     def test_compose_passes_php_build_args(self):
         compose = (self.root / "docker-compose.yml").read_text()
         self.assertIn("PHP_VERSION:", compose)

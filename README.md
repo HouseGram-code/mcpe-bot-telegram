@@ -59,7 +59,7 @@ mcpe-bot/
 │  ├─ requirements.txt      # pyTelegramBotAPI 4.28+, docker SDK 7.1+
 │  └─ Dockerfile            # python:3.13-slim + tini + healthcheck
 ├─ server-image/
-│  ├─ Dockerfile            # PHP 7 (pthreads) из pmmp/PHP-Binaries + GenisysPro.phar
+│  ├─ Dockerfile            # PHP 7.0 (ZTS + pthreads) + GenisysPro.phar
 │  ├─ entrypoint.sh         # генерит server.properties/pocketmine.yml, ops, старт
 │  └─ GenisysPro.phar       # твоё ядро (уже внутри архива)
 ├─ scripts/
@@ -121,17 +121,26 @@ mcpe-bot/
   `version:`).
 - **Сервер:** GenisysPro (форк PocketMine-MP эпохи Genisys/LiteCore, MCPE
   **1.1.5**) — ему нужен **PHP 7.x с pthreads**, поэтому образ многостадийный:
-  первая стадия сама собирает PHP 7.2 (ZTS) из исходников php.net плюс
-  расширения pthreads и yaml (`server-image/build-php.sh`), вторая — тонкий
-  рантайм с `.phar`. `pmmp/PHP-Binaries` больше не используется: апстрим
-  удалил ветки `php-7.x`, а его текущие скрипты собирают только PHP 8.
+  первая стадия сама собирает **PHP 7.0.33 (ZTS)** из исходников php.net плюс
+  расширения pthreads (v3.1.6) и yaml (`server-image/build-php.sh`), вторая —
+  тонкий рантайм с `.phar`.
+
+  Почему именно 7.0, а не свежее: Genisys объявляет класс `Void`
+  (`pocketmine\level\generator\Void`), а в PHP 7.1 слово `void` стало
+  зарезервированным — на 7.1+ ядро сразу падает с `Cannot use ... as Void
+  because 'Void' is a special class name`. Поэтому базовый образ — `debian:stretch`
+  (последний Debian с OpenSSL 1.0.2 и libcurl, совместимыми с PHP 7.0); при
+  другом базовом образе скрипт сам собирает OpenSSL 1.0.2 в `/opt/php/openssl`.
+  `pmmp/PHP-Binaries` не используется: апстрим удалил ветки `php-7.x`, а его
+  текущие скрипты собирают только PHP 8.
   Первая сборка занимает 10–25 минут; можно ускорить готовым бинарником:
 
   ```bash
-  PHP_TARBALL_URL=https://.../PHP-7.2-Linux-x86_64.tar.gz make build
+  PHP_TARBALL_URL=https://.../PHP-7.0-Linux-x86_64.tar.gz make build
   ```
 
-  Версии сборки меняются в `.env`: `PHP_VERSION`, `PTHREADS_REF`, `YAML_VERSION`.
+  Версии сборки меняются в `.env`: `PHP_VERSION`, `PTHREADS_REF`, `YAML_VERSION`,
+  `PHP_BUILD_IMAGE`, `PHP_RUNTIME_IMAGE`.
   Если pthreads не собрался, сборка падает сразу — молча нерабочего
   образа не получишь.
 - Игровые контейнеры по умолчанию идут в `network_mode: host` — для Bedrock
@@ -180,6 +189,7 @@ UPnP-XML роутера, NAT-PMP обмен с локальным фейковы
 | Адрес локальный (192.168.x.x) | UPnP выключен на роутере или серый IP → включи UPnP либо `PLAYIT_SECRET` |
 | Сервер стартует и падает | `📜 Логи`; в конце сборки должен быть pthreads в `php -m` |
 | `Remote branch php-7.2 not found` | старый Dockerfile: обнови проект, PHP теперь собирается из php.net (`server-image/build-php.sh`) |
+| `Cannot use ... as Void because 'Void' is a special class name` | образ собран на PHP 7.1+; нужен PHP 7.0 (`PHP_VERSION=7.0.33`), пересобери `make build` и создай сервер заново |
 | Игра не видит сервер | в игре «Добавить сервер» вручную, адрес + порт; проверь UDP, а не TCP |
 
 ---

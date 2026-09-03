@@ -38,10 +38,12 @@ services:
     build:
       context: ./server-image
       args:
-        PHP_VERSION: ${PHP_VERSION:-7.2.34}
-        PTHREADS_REF: ${PTHREADS_REF:-v3.2.0}
+        PHP_VERSION: ${PHP_VERSION:-7.0.33}
+        PTHREADS_REF: ${PTHREADS_REF:-v3.1.6}
         YAML_VERSION: ${YAML_VERSION:-2.0.4}
         PHP_TARBALL_URL: ${PHP_TARBALL_URL:-}
+        BASE_IMAGE: ${PHP_BUILD_IMAGE:-debian:stretch}
+        RUNTIME_IMAGE: ${PHP_RUNTIME_IMAGE:-debian:stretch-slim}
     image: ${SERVER_IMAGE:-genisyspro:litecore-1.1.5}
 
   # --------------------------------------- optional: one server without the bot
