@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Enabled by `make hooks` (git config core.hooksPath .githooks).
+# Rejects any commit that would put a token, .env or runtime data into git.
+exec bash "$(git rev-parse --show-toplevel)/scripts/check-secrets.sh" staged

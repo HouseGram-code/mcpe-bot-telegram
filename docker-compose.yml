@@ -1,0 +1,76 @@
+name: mcpe-bot
+
+services:
+  # ---------------------------------------------------------------- the bot
+  bot:
+    build:
+      context: ./bot
+    image: mcpe-bot:latest
+    container_name: mcpe-bot
+    restart: unless-stopped
+    # Host networking is required so the bot can:
+    #  * send SSDP multicast for UPnP discovery,
+    #  * talk NAT-PMP to the router,
+    #  * check that a UDP port is really free on the host.
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      DB_PATH: /data/bot.sqlite3
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
+      # Optional secret store: put the token into ./secrets/bot_token and set
+      # BOT_TOKEN_FILE=/run/secrets/bot_token to keep it out of every file
+      # that git can see.
+      - ./secrets:/run/secrets:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ------------------------------------------------- builder for the MC image
+  # Not started as a service: `make build` (or `docker compose --profile build
+  # build server-image`) only bakes the image that the bot then runs.
+  server-image:
+    profiles: ["build"]
+    build:
+      context: ./server-image
+      args:
+        PHP_BRANCH: ${PHP_BRANCH:-php-7.2}
+        PHP_TARBALL_URL: ${PHP_TARBALL_URL:-}
+    image: ${SERVER_IMAGE:-genisyspro:litecore-1.1.5}
+
+  # --------------------------------------- optional: one server without the bot
+  # docker compose --profile manual up -d mc-manual
+  mc-manual:
+    profiles: ["manual"]
+    image: ${SERVER_IMAGE:-genisyspro:litecore-1.1.5}
+    container_name: mcpe-manual
+    restart: unless-stopped
+    stdin_open: true
+    network_mode: host
+    environment:
+      SERVER_PORT: ${MANUAL_PORT:-19132}
+      SERVER_NAME: GenisysPro-manual
+      MOTD: GenisysPro 1.1.5
+      MAX_PLAYERS: 20
+      PHP_MEMORY_LIMIT: 768M
+      TZ: ${TZ:-UTC}
+    volumes:
+      - mc-manual-data:/data
+
+  # ------------------------------------------- optional: playit.gg tunnel agent
+  # docker compose --profile playit up -d playit
+  playit:
+    profiles: ["playit"]
+    image: ${PLAYIT_IMAGE:-ghcr.io/playit-cloud/playit-agent:0.15}
+    container_name: playit
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      SECRET_KEY: ${PLAYIT_SECRET:-}
+
+volumes:
+  mc-manual-data:

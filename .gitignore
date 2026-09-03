@@ -1,0 +1,25 @@
+# --- secrets: never commit -------------------------------------------------
+.env
+.env.*
+!.env.example
+secrets/*
+!secrets/.gitkeep
+*.token
+*.secret
+*.pem
+*.key
+
+# --- runtime data ----------------------------------------------------------
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# --- python ----------------------------------------------------------------
+__pycache__/
+*.pyc
+.venv/
+
+# --- packaging -------------------------------------------------------------
+*.zip
+*.tar.gz
