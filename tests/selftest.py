@@ -590,5 +590,29 @@ class SecurityTests(unittest.TestCase):
             os.environ["BOT_TOKEN"] = "123456:TEST-TOKEN"
 
 
+class BuildTests(unittest.TestCase):
+    """The server image must not depend on branches upstream deleted."""
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+
+    def test_dockerfile_builds_php_locally(self):
+        dockerfile = (self.root / "server-image" / "Dockerfile").read_text()
+        self.assertIn("build-php.sh", dockerfile)
+        self.assertIn("ARG PHP_VERSION", dockerfile)
+        self.assertNotIn("PHP-Binaries", dockerfile.split("FROM")[1])
+
+    def test_build_php_script_is_self_contained(self):
+        script = (self.root / "server-image" / "build-php.sh").read_text()
+        self.assertIn("php.net/distributions", script)
+        self.assertIn("krakjoe/pthreads", script)
+        self.assertIn("--enable-maintainer-zts", script)
+        self.assertNotIn("pmmp/PHP-Binaries.git", script)
+
+    def test_compose_passes_php_build_args(self):
+        compose = (self.root / "docker-compose.yml").read_text()
+        self.assertIn("PHP_VERSION:", compose)
+        self.assertNotIn("PHP_BRANCH", compose)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

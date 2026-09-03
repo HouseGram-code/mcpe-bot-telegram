@@ -2,59 +2,46 @@
 #
 # GenisysPro (PocketMine-MP fork) / LiteCore 1.1.5 - MCPE 1.1.5
 #
-# Stage 1 builds the PHP 7 runtime with pthreads that old PocketMine forks need.
-# By default it compiles pmmp/PHP-Binaries (branch php-7.2). If you already have
-# a prebuilt tarball, pass PHP_TARBALL_URL and the build skips compilation:
+# Stage 1 builds the PHP 7 runtime (ZTS + pthreads + yaml) that old PocketMine
+# forks need. build-php.sh compiles PHP from php.net sources; pmmp/PHP-Binaries
+# is not used any more because upstream deleted its php-7.x branches and the
+# current scripts build PHP 8 only, which GenisysPro / LiteCore cannot run.
+#
+# Already have a ready-made PHP 7 tarball? Then nothing gets compiled:
 #
 #   docker build --build-arg PHP_TARBALL_URL=https://.../PHP-7.2-Linux-x86_64.tar.gz .
 #
-ARG PHP_BRANCH=php-7.2
+ARG PHP_VERSION=7.2.34
 
 FROM debian:bullseye AS php-builder
-ARG PHP_BRANCH
+ARG PHP_VERSION
 ARG PHP_TARBALL_URL=""
+ARG PTHREADS_REF=v3.2.0
+ARG YAML_VERSION=2.0.4
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        autoconf automake libtool libtool-bin m4 make cmake gcc g++ \
+        autoconf automake libtool libtool-bin m4 make gcc g++ \
         bison re2c file pkg-config git curl wget ca-certificates \
-        tar xz-utils bzip2 gzip patch python3 libc6-dev \
+        tar xz-utils bzip2 gzip patch libc6-dev \
+        libxml2-dev libssl-dev libcurl4-openssl-dev zlib1g-dev \
+        libsqlite3-dev libyaml-dev libgmp-dev libreadline-dev \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-RUN set -eux; \
-    if [ -n "$PHP_TARBALL_URL" ]; then \
-        echo "==> downloading prebuilt PHP: $PHP_TARBALL_URL"; \
-        curl -fsSL "$PHP_TARBALL_URL" -o php.tar.gz; \
-        mkdir -p /tmp/php && tar -xzf php.tar.gz -C /tmp/php; \
-        PHP_BIN="$(find /tmp/php -type f -name php -perm -u+x | head -n 1)"; \
-        test -n "$PHP_BIN"; \
-        PHP_ROOT="$(dirname "$(dirname "$PHP_BIN")")"; \
-    else \
-        echo "==> compiling PHP from pmmp/PHP-Binaries ($PHP_BRANCH)"; \
-        git clone --depth 1 -b "$PHP_BRANCH" https://github.com/pmmp/PHP-Binaries.git .; \
-        ./compile.sh -t linux64 -j"$(nproc)"; \
-        PHP_ROOT="/build/bin/php7"; \
-    fi; \
-    mkdir -p /opt/php; \
-    cp -a "$PHP_ROOT"/. /opt/php/; \
-    EXT_DIR="$(find /opt/php/lib -maxdepth 4 -type d -name 'no-debug-*' | head -n 1)"; \
-    if [ -n "$EXT_DIR" ] && [ -f /opt/php/bin/php.ini ]; then \
-        sed -i "s|^extension_dir=.*|extension_dir=\"$EXT_DIR\"|" /opt/php/bin/php.ini; \
-    fi; \
-    PHPRC=/opt/php/bin /opt/php/bin/php -v; \
-    PHPRC=/opt/php/bin /opt/php/bin/php -m > /opt/php/modules.txt; \
-    if ! grep -qi pthreads /opt/php/modules.txt; then \
-        echo "WARNING: pthreads extension missing - GenisysPro may refuse to start"; \
-    fi
+COPY build-php.sh /usr/local/bin/build-php.sh
+RUN chmod +x /usr/local/bin/build-php.sh && /usr/local/bin/build-php.sh
 
 
 FROM debian:bullseye-slim AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 
+# tini for clean shutdowns + the shared libraries the compiled PHP links against
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates tini tzdata procps \
+        libssl1.1 libcurl4 zlib1g libsqlite3-0 libyaml-0-2 libgmp10 \
+        libreadline8 libedit2 libxml2 \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 --shell /bin/bash mc
 

@@ -121,16 +121,19 @@ mcpe-bot/
   `version:`).
 - **Сервер:** GenisysPro (форк PocketMine-MP эпохи Genisys/LiteCore, MCPE
   **1.1.5**) — ему нужен **PHP 7.x с pthreads**, поэтому образ многостадийный:
-  первая стадия компилирует PHP из `github.com/pmmp/PHP-Binaries`
-  (`PHP_BRANCH=php-7.2`), вторая — тонкий рантайм с `.phar`.
-  Первая сборка занимает 10–30 минут; можно ускорить готовым бинарником:
+  первая стадия сама собирает PHP 7.2 (ZTS) из исходников php.net плюс
+  расширения pthreads и yaml (`server-image/build-php.sh`), вторая — тонкий
+  рантайм с `.phar`. `pmmp/PHP-Binaries` больше не используется: апстрим
+  удалил ветки `php-7.x`, а его текущие скрипты собирают только PHP 8.
+  Первая сборка занимает 10–25 минут; можно ускорить готовым бинарником:
 
   ```bash
   PHP_TARBALL_URL=https://.../PHP-7.2-Linux-x86_64.tar.gz make build
   ```
 
-  Если сборка PHP не удалась, поменяй ветку (`php-7.0`, `php-7.1`, `php-7.3`)
-  в `.env` → `PHP_BRANCH`.
+  Версии сборки меняются в `.env`: `PHP_VERSION`, `PTHREADS_REF`, `YAML_VERSION`.
+  Если pthreads не собрался, сборка падает сразу — молча нерабочего
+  образа не получишь.
 - Игровые контейнеры по умолчанию идут в `network_mode: host` — для Bedrock
   (UDP/RakNet) это надёжнее, чем docker-proxy. Можно переключить на `bridge`
   через `SERVER_NETWORK_MODE`.
@@ -175,7 +178,8 @@ UPnP-XML роутера, NAT-PMP обмен с локальным фейковы
 | `Образ … не собран` | `make build` |
 | «Нет доступа к Docker» | проверь монтирование `/var/run/docker.sock` в `docker-compose.yml` |
 | Адрес локальный (192.168.x.x) | UPnP выключен на роутере или серый IP → включи UPnP либо `PLAYIT_SECRET` |
-| Сервер стартует и падает | `📜 Логи`; чаще всего не собрался pthreads → смени `PHP_BRANCH` |
+| Сервер стартует и падает | `📜 Логи`; в конце сборки должен быть pthreads в `php -m` |
+| `Remote branch php-7.2 not found` | старый Dockerfile: обнови проект, PHP теперь собирается из php.net (`server-image/build-php.sh`) |
 | Игра не видит сервер | в игре «Добавить сервер» вручную, адрес + порт; проверь UDP, а не TCP |
 
 ---
